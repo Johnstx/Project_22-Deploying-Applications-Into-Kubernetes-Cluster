@@ -1,0 +1,30 @@
+#Part 1
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-rs
+  labels:
+    env: production
+    tier: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels: 
+       env: production
+    matchExpressions:
+     - { key: tier, operator: In, values: [frontend] }
+#Part 2
+  template:
+    metadata:
+      name: nginx-pod
+      labels:
+         env: production
+         tier: frontend
+    spec:
+      containers:
+      - image: nginx:latest
+        name: nginx-pod
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
