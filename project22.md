@@ -350,3 +350,118 @@ On the web browser, enter ```localhost:8089``` to see the nginx page in the brow
 
 ![alt text](<images/svc 3 port forward.jpg>)
 
+
+#### Expose a Service on a server's public IP address & static port
+We have accessed a server/node (our nginx) on a clusterIP, a private IP through port-forwarding. Lets try same through the public IP. To achive this, we have to use a different kind of serivce, the **[nodePort](https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)**
+
+A **Node port** service type exposes the service on a static port on the node's IP address. NodePorts are in the 30000-32767 range by default, which means a NodePort is unlikely to match a service’s intended port (for example, 80 may be exposed as 30080).
+
+Lets  update the nginx-service yaml to use a NodePort service.
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: NodePort
+  selector:
+    app: nginx-pod
+  ports:
+    - protocol: TCP
+      port: 80
+      nodePort: 30080
+```
+
+*We have specfied the type of service (NodePort) and the NodePort number to use*
+
+Next, Lets look at ReplicaSet and see what it looks like.
+
+To delete the nginx-pod:
+``` kubectl delete -f nginx-pod.yml```
+
+
+
+#### Create a ReplicaSet
+Lets create a ReplicaSet object from a file ```rs.yml```
+```
+#Part 1
+apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: nginx-rs
+spec:
+  replicas: 3
+  selector:
+    app: nginx-pod
+#Part 2
+  template:
+    metadata:
+      name: nginx-pod
+      labels:
+         app: nginx-pod
+    spec:
+      containers:
+      - image: nginx:latest
+        name: nginx-pod
+        ports:
+        - containerPort: 80
+          protocol: TCP
+
+```
+
+```
+kubectl apply -f rs.yaml
+``` 
+
+Check the pods created
+
+```
+kubectl get pods
+```
+![alt text](<images/rs get pods.jpg>)
+
+![alt text](<images/rs describe rs.jpg>)
+
+
+#### Using AWS LoadBalancer to access your service in Kubernetes.
+Lets explore the use of the LoadBalancer type of service.
+
+Update the service manifest with the file below
+
+```
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-service
+spec:
+  type: LoadBalancer
+  selector:
+    tier: frontend
+  ports:
+    - protocol: TCP
+      port: 80 # This is the port the Loadbalancer is listening at
+      targetPort: 80 # This is the port the container is listening at
+```
+
+```
+kubectl apply -f nginx-service.yaml
+```
+Get the newly created service 
+
+```
+kubectl get service nginx-service
+```
+*An ALB will be created on the AWS console*
+
+![alt text](<images/svc loadbalancer.jpg>)
+
+A Kubernetes component in the control plane called **Cloud-controller-manager** is responsible for triggeriong this action. It connects to your specific cloud provider's (AWS) APIs and create resources such as Load balancers. It will ensure that the resource is appropriately tagged.
+
+1. A clusterIP key is updated in the manifest and assigned an IP address. Even though you have specified a Loadbalancer service type, internally it still requires a clusterIP to route the external traffic through.
+2. In the ports section, nodePort is still used. This is because Kubernetes still needs to use a dedicated port on the worker node to route the traffic through. 3. Ensure that port range 30000-32767 is opened in your inbound Security Group configuration.
+More information about the provisioned balancer is also published in the .status.loadBalancer field.
+
+![alt text](<images/svc loadbalancer1.jpg>)
+
+Note the hostname on last row, paste this hostname on the browser to access the application, NGINX.
