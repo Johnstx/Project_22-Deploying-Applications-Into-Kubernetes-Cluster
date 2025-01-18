@@ -637,10 +637,46 @@ If you were to update the content of the ```index.html``` file inside the contai
 To see this,
 1. Scale the Pods down to 1 replica.
 
+  ```
+  kubectl scale deployment nginx-deployment --replicas=1
+  ```  
 2. Exec into the running container 
+
+```
+kubectl exec -it nginx-deployment-123456-7658 bash
+```
+
 3. Install ``vim`` so that you can edit the file
 
 ```
 apt-get update
 apt-get install vim
 ```
+4. Update the content of the file **/usr/share/nginx/html/index.html**
+*make some changes to test run the concept*
+
+Reload the browser to see the changes 
+
+![alt text](images/index2.jpg)
+
+Now delete the pod. 
+
+``` 
+kubectl delete pod nginx-deployment-123456-7658
+```
+The ReplicaSet will create another pod to replace the one we just deleted.
+*Note: The changes we made will not persist in the new pod, because pods do not store data - hence why they are called ```ephemeral```  or ```stateless```*
+
+torage is a critical part of running containers, and Kubernetes offers some powerful primitives for managing it
+
+**Dynamic volume provisioning**, a feature unique to Kubernetes, which allows storage volumes to be created on-demand. Without dynamic provisioning, DevOps engineers must manually make calls to the cloud or storage provider to create new storage volumes, and then create **PersistentVolume** objects to represent them in Kubernetes. The dynamic provisioning feature eliminates the need for DevOps to pre-provision storage. Instead, it automatically provisions storage when it is requested by users.
+To make the data persist in case of a Pod's failure, you will need to configure the Pod to use **Volumes**.
+
+
+
+To clean up the deployment
+```
+kubectl delete deployment nginx-deployment
+```
+
+**Next**: *Persistence using Volumes*
