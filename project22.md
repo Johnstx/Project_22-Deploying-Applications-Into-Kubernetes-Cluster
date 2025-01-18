@@ -655,6 +655,8 @@ apt-get install vim
 4. Update the content of the file **/usr/share/nginx/html/index.html**
 *make some changes to test run the concept*
 
+![alt text](images/index.jpg)
+
 Reload the browser to see the changes 
 
 ![alt text](images/index2.jpg)
