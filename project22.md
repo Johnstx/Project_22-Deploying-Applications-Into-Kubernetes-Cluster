@@ -459,9 +459,188 @@ kubectl get service nginx-service
 A Kubernetes component in the control plane called **Cloud-controller-manager** is responsible for triggeriong this action. It connects to your specific cloud provider's (AWS) APIs and create resources such as Load balancers. It will ensure that the resource is appropriately tagged.
 
 1. A clusterIP key is updated in the manifest and assigned an IP address. Even though you have specified a Loadbalancer service type, internally it still requires a clusterIP to route the external traffic through.
-2. In the ports section, nodePort is still used. This is because Kubernetes still needs to use a dedicated port on the worker node to route the traffic through. 3. Ensure that port range 30000-32767 is opened in your inbound Security Group configuration.
-More information about the provisioned balancer is also published in the .status.loadBalancer field.
+2. In the ports section, ```nodePort``` is still used. This is because Kubernetes still needs to use a dedicated port on the worker node to route the traffic through. 
+3. Ensure that port range ```30000-32767``` is opened in your inbound Security Group configuration.
+More information about the provisioned balancer is also published in the ```.status.loadBalancer``` field.
 
 ![alt text](<images/svc loadbalancer1.jpg>)
 
 Note the hostname on last row, paste this hostname on the browser to access the application, NGINX.
+
+To view details of the service, you can run the ```get``` or ```describe``` command.
+``` kubectl get svc nginx-service``` OR ```kubectl describe nginx-service```
+![alt text](<images/svc 1.jpg>)
+![alt text](<images/svc 2.jpg>)
+
+
+#### Deployments
+*Officially, it is highly recommended to use Deplyments to manage replica sets rather than using replica sets directly*
+
+A Deployment is another layer above ReplicaSets and Pods, newer and more advanced level concept than ReplicaSets. It manages the deployment of ReplicaSets and allows for easy updating of a ReplicaSet as well as the ability to roll back to a previous version of deployment. It is declarative and can be used for rolling updates of micro-services, ensuring there is no downtime.
+
+1. Lets delete the ReplicaSet
+
+``` kubectl delete rs nginx-rs``` 
+
+2. Understand the layout of the deployment.yaml manifest below. Lets go through the 3 separated sections:
+
+``` 
+# Section 1 - This is the part that defines the deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    tier: frontend
+
+# Section 2 - This is the Replica set layer controlled by the deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+
+# Section 3 - This is the Pod section controlled by the deployment and selected by the replica set in section 2.
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+``` 
+3. Putting them altogether
+
+```
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-deployment
+  labels:
+    tier: frontend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      tier: frontend
+  template:
+    metadata:
+      labels:
+        tier: frontend
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:latest
+        ports:
+        - containerPort: 80
+``` 
+
+
+
+```
+kubectl apply -f deployment.yaml
+```
+The deployment object is the most top layer resource when pods are deployed. Under the deployment layer, there is the ReplicaSet, then the pods. Since creating a Deployment object also creates a ReplicaSet a layer below, we can run commands to get details on the ReplicaSet.
+
+Get the deployment
+
+```kubectl get deploy```
+
+Get the replicaset
+
+```kubectl get rs```
+
+Get the pods
+
+```kubectl get pods```
+
+Exec into one of the Pod's container to run Linux commands
+
+```
+kubectl exec -it nginx-deployment-56466d4948-78j9c bash
+``` 
+![alt text](<images/deployment exec it.jpg>)
+
+List the files and folders in the Nginx directory
+should have  a structure similar to below 
+```
+root@nginx-deployment-56466d4948-78j9c:/# ls -ltr /etc/nginx/
+total 24
+-rw-r--r-- 1 root root  664 May 25 12:28 uwsgi_params
+-rw-r--r-- 1 root root  636 May 25 12:28 scgi_params
+-rw-r--r-- 1 root root 5290 May 25 12:28 mime.types
+-rw-r--r-- 1 root root 1007 May 25 12:28 fastcgi_params
+-rw-r--r-- 1 root root  648 May 25 13:01 nginx.conf
+lrwxrwxrwx 1 root root   22 May 25 13:01 modules -> /usr/lib/nginx/modules
+drwxr-xr-x 1 root root   26 Jun 18 22:08 conf.d
+```
+
+Check the content of the default Nginx configuration file
+
+```
+root@nginx-deployment-56466d4948-78j9c:/# cat  /etc/nginx/conf.d/default.conf 
+server {
+    listen       80;
+    listen  [::]:80;
+    server_name  localhost;
+
+    #access_log  /var/log/nginx/host.access.log  main;
+
+    location / {
+        root   /usr/share/nginx/html;
+        index  index.html index.htm;
+    }
+
+    #error_page  404              /404.html;
+
+    # redirect server error pages to the static page /50x.html
+    #
+    error_page   500 502 503 504  /50x.html;
+    location = /50x.html {
+        root   /usr/share/nginx/html;
+    }
+
+    # proxy the PHP scripts to Apache listening on 127.0.0.1:80
+    #
+    #location ~ \.php$ {
+    #    proxy_pass   http://127.0.0.1;
+    #}
+
+    # pass the PHP scripts to FastCGI server listening on 127.0.0.1:9000
+    #
+    #location ~ \.php$ {
+    #    root           html;
+    #    fastcgi_pass   127.0.0.1:9000;
+    #    fastcgi_index  index.php;
+    #    fastcgi_param  SCRIPT_FILENAME  /scripts$fastcgi_script_name;
+    #    include        fastcgi_params;
+    #}
+
+    # deny access to .htaccess files, if Apache's document root
+    # concurs with nginx's one
+    #
+    #location ~ /\.ht {
+    #    deny  all;
+    #}
+}
+```
+
+
+#### Persisting Data for Pods
+
+Deployments are stateless by design. Hence, any data stored inside the Pod's container does not persist when the Pod dies.
+
+If you were to update the content of the ```index.html``` file inside the container, and the Pod dies, that content will be lost since a new Pod will replace the dead one.
+To see this,
+1. Scale the Pods down to 1 replica.
+
+2. Exec into the running container 
+3. Install ``vim`` so that you can edit the file
+
+```
+apt-get update
+apt-get install vim
+```
